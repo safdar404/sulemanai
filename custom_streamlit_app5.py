@@ -393,6 +393,8 @@ html, body, .stApp, input, textarea, button { font-family: 'Plus Jakarta Sans', 
 
 from aesthetic_theme import apply_theme
 apply_theme()
+from purple_palette import apply_palette
+apply_palette()
 
 
 def brand_header():
