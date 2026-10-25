@@ -391,6 +391,9 @@ html, body, .stApp, input, textarea, button { font-family: 'Plus Jakarta Sans', 
 </style>
 """, unsafe_allow_html=True)
 
+from aesthetic_theme import apply_theme
+apply_theme()
+
 
 def brand_header():
     st.markdown(
@@ -1885,3 +1888,4 @@ elif page == PAGES[3]:
     page_trig()
 else:
     page_animations()
+
