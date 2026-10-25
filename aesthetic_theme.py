@@ -46,6 +46,14 @@ mark{background:#4a3973!important;color:#fff!important}
 :focus-visible{outline:3px solid #00d4ff!important;outline-offset:3px!important}
 @media(max-width:768px){.block-container{padding-top:1.5rem}.fw-head,.mg-head,.brand,.rx-hero{padding:20px!important}.mg-head{grid-template-columns:1fr!important}.rx-hero.big{padding:24px!important}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}.stButton>button:hover,[data-testid="stMetric"]:hover{transform:none!important}}
+/* Readability and compact header refinements after live review. */
+[data-testid="stCaptionContainer"] p{color:#b7c6e6!important}
+[data-testid="stAlert"] p,[data-testid="stAlert"] li{color:#eef2ff!important}
+.fw-head{display:grid!important;grid-template-columns:minmax(0,1.2fr) minmax(260px,1fr);align-items:center!important;gap:24px!important}
+.fw-head .fw-word{font-size:clamp(30px,3.5vw,44px)!important;line-height:1.15!important;padding:0!important;margin:0!important}
+.fw-head .fw-word small{line-height:1.5!important;font-size:15px!important}
+.fw-note{max-width:none!important}
+@media(max-width:1000px){.fw-head{grid-template-columns:1fr!important;gap:16px!important}}
 </style>
 """
 
