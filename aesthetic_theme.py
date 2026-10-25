@@ -64,6 +64,7 @@ mark{background:#4a3973!important;color:#fff!important}
 [data-testid="stSidebar"] h2:first-of-type{display:none}
 [data-testid="stLogo"]{height:auto!important;max-height:74px!important;width:100%;object-fit:contain;object-position:left}
 @media(max-width:600px){.fw-word:before,.mg-head h1:before,.rx-hero h1:before{width:44px;height:44px;margin-right:9px}}
+[data-testid="stSidebarLogo"]{width:260px!important;height:52px!important;max-width:100%!important;object-fit:contain;object-position:left}
 </style>
 """
 
