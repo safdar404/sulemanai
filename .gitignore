@@ -1,0 +1,7 @@
+user_data/
+__pycache__/
+.streamlit/secrets.toml
+.env
+chat_history.json
+chat_images/
+media/

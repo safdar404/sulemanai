@@ -1,1 +1,41 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 112 112" role="img" aria-label="Suleman AI logo"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#47d2b3"/><stop offset=".48" stop-color="#3b82a0"/><stop offset="1" stop-color="#6c82c1"/></linearGradient><linearGradient id="b" x2="1" y2="1"><stop stop-color="#30365c"/><stop offset="1" stop-color="#111a32"/></linearGradient></defs><rect x="5" y="5" width="102" height="102" rx="29" fill="#060c20"/><rect x="3" y="2" width="106" height="104" rx="29" fill="url(#b)" stroke="url(#g)" stroke-width="3"/><path d="M25 12h59" stroke="#ffffff" stroke-opacity=".18" stroke-width="2" stroke-linecap="round"/><path d="M25 62V35c13-5 23-3 31 4 8-7 18-9 31-4v27c-12-4-22-2-31 5-9-7-19-9-31-5Z" fill="none" stroke="white" stroke-width="4" stroke-linejoin="round"/><path d="M56 39v28M33 45l13 2M66 47l13-2" stroke="#b9eaff" stroke-width="3" stroke-linecap="round"/><path d="m56 14 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z" fill="#99f0d2"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Suleman AI agent logo">
+  <defs>
+    <linearGradient id="rb" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff3d6e"/>
+      <stop offset=".2" stop-color="#ff9f1c"/>
+      <stop offset=".4" stop-color="#ffe14d"/>
+      <stop offset=".6" stop-color="#2ee59d"/>
+      <stop offset=".8" stop-color="#2bb8ff"/>
+      <stop offset="1" stop-color="#a64dff"/>
+    </linearGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d1a3f"/>
+      <stop offset="1" stop-color="#0b0a1f"/>
+    </linearGradient>
+    <linearGradient id="eye" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2bb8ff"/>
+      <stop offset="1" stop-color="#2ee59d"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="124" height="124" rx="34" fill="url(#rb)"/>
+  <rect x="7" y="7" width="114" height="114" rx="30" fill="#0e0c26"/>
+  <!-- antenna -->
+  <line x1="64" y1="30" x2="64" y2="20" stroke="url(#rb)" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="64" cy="17" r="6" fill="#ffe14d"/>
+  <circle cx="64" cy="17" r="2.6" fill="#fff"/>
+  <!-- ears -->
+  <rect x="17" y="56" width="10" height="24" rx="5" fill="#ff3d6e"/>
+  <rect x="101" y="56" width="10" height="24" rx="5" fill="#a64dff"/>
+  <!-- head -->
+  <rect x="25" y="31" width="78" height="72" rx="24" fill="url(#face)" stroke="url(#rb)" stroke-width="4"/>
+  <!-- visor -->
+  <rect x="34" y="47" width="60" height="28" rx="14" fill="#05040f"/>
+  <ellipse cx="51" cy="61" rx="7.5" ry="8.5" fill="url(#eye)"/>
+  <ellipse cx="77" cy="61" rx="7.5" ry="8.5" fill="url(#eye)"/>
+  <circle cx="53.5" cy="57.5" r="2.6" fill="#fff"/>
+  <circle cx="79.5" cy="57.5" r="2.6" fill="#fff"/>
+  <!-- smile -->
+  <path d="M50 86 Q64 95 78 86" fill="none" stroke="#ff9f1c" stroke-width="4" stroke-linecap="round"/>
+  <!-- spark -->
+  <path d="M100 18 l2.6 7.4 7.4 2.6 -7.4 2.6 -2.6 7.4 -2.6 -7.4 -7.4 -2.6 7.4 -2.6z" fill="#fff"/>
+</svg>

@@ -1,4 +1,6 @@
 import base64
+import html
+import hashlib
 import io
 import json
 import math
@@ -26,95 +28,37 @@ APP_NAME = "Suleman AI"
 # ---------- Page setup ----------
 BASE_DIR = Path(__file__).parent
 
-# ---------- Logo: gradient "S" monogram with a spark (no hat) ----------
-# Drawn in code so it always matches the app colours. Saved once as a PNG next to this file.
-LOGO_FILE = BASE_DIR / "suleman_logo_v1.png"
-_LOGO_STOPS = [(0.0, (0, 212, 255)), (0.5, (124, 58, 237)), (1.0, (255, 46, 136))]
-_S_SEGMENTS = [  # cubic bezier segments of the "S" in a 64×64 box
-    ((42, 20), (39.5, 17), (35.8, 15.5), (31.5, 15.5)),
-    ((31.5, 15.5), (25, 15.5), (20.5, 19.1), (20.5, 24.3)),
-    ((20.5, 24.3), (20.5, 35.3), (42, 30.7), (42, 40.3)),
-    ((42, 40.3), (42, 45.3), (37.4, 49), (30.8, 49)),
-    ((30.8, 49), (26, 49), (22, 47.2), (19.5, 44)),
-]
-_S_SCALE, _S_CX, _S_CY = 0.82, 30.75, 32.25   # shrink the S a little so it sits inside a circle
-_SPARK_C, _SPARK_R = (48.5, 16.5), 5.2
-
-
-def _s_xy(x, y):
-    return _S_CX + (x - _S_CX) * _S_SCALE, _S_CY + (y - _S_CY) * _S_SCALE
-
-
-def _bezier(p0, p1, p2, p3, n=240):
-    pts = []
-    for i in range(n + 1):
-        t = i / n
-        a, b, c, d = (1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t ** 2, t ** 3
-        pts.append((a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0],
-                    a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1]))
-    return pts
-
-
-def _spark_points(cx, cy, r, k=1.0):
-    pts = []
-    for i in range(8):
-        ang = -math.pi / 2 + i * math.pi / 4
-        rad = r if i % 2 == 0 else r * 0.28
-        pts.append(((cx + rad * math.cos(ang)) * k, (cy + rad * math.sin(ang)) * k))
-    return pts
-
-
-def draw_logo(size=256):
-    """Render the Suleman AI logo as a square PIL image (looks right in a circle too)."""
-    ss = 4
-    big = size * ss
-    k = big / 64.0
-    yy, xx = np.mgrid[0:big, 0:big]
-    t = (xx + yy) / (2.0 * (big - 1))
-    rgb = np.zeros((big, big, 3), dtype=np.float32)
-    for (t0, c0), (t1, c1) in zip(_LOGO_STOPS, _LOGO_STOPS[1:]):
-        mask = (t >= t0) & (t <= t1)
-        f = ((t - t0) / (t1 - t0))[mask]
-        for ch in range(3):
-            rgb[..., ch][mask] = c0[ch] + (c1[ch] - c0[ch]) * f
-    img = Image.fromarray(rgb.astype(np.uint8), "RGB")
-    d = ImageDraw.Draw(img)
-    r = 5.5 * _S_SCALE * k / 2
-    for seg in _S_SEGMENTS:
-        for x, y in _bezier(*seg):
-            x, y = _s_xy(x, y)
-            d.ellipse([x * k - r, y * k - r, x * k + r, y * k + r], fill="white")
-    for (px_, py_), inner in (((42, 20), (255, 46, 136)), ((19.5, 44), (0, 212, 255))):
-        cx, cy = _s_xy(px_, py_)
-        r1, r2 = 4.4 * _S_SCALE * k, 1.8 * _S_SCALE * k
-        d.ellipse([cx * k - r1, cy * k - r1, cx * k + r1, cy * k + r1], fill="white")
-        d.ellipse([cx * k - r2, cy * k - r2, cx * k + r2, cy * k + r2], fill=inner)
-    d.polygon(_spark_points(*_SPARK_C, _SPARK_R, k), fill="white")
-    return img.resize((size, size), Image.LANCZOS)
-
-
-# Use the photo logo (suleman_logo.png, hat removed) when it is next to this file;
-# otherwise fall back to the drawn "S" logo.
-PHOTO_LOGO = BASE_DIR / "suleman_logo.png"
-if PHOTO_LOGO.exists():
-    LOGO_FILE = PHOTO_LOGO
-elif not LOGO_FILE.exists():
-    try:
-        draw_logo(256).save(LOGO_FILE)
-    except Exception:
-        pass
-
+# ---------- Logo: rainbow AI-agent robot (assets/logo.svg + PNG copy for avatars) ----------
+ASSETS_DIR = BASE_DIR / "assets"
+LOGO_FILE = ASSETS_DIR / "agent_logo.png"
 LOGO_B64 = base64.b64encode(LOGO_FILE.read_bytes()).decode() if LOGO_FILE.exists() else ""
-ASSISTANT_AVATAR = str(LOGO_FILE) if LOGO_FILE.exists() else "✨"
+ASSISTANT_AVATAR = str(LOGO_FILE) if LOGO_FILE.exists() else "🤖"
 
-st.set_page_config(page_title=APP_NAME, page_icon=str(LOGO_FILE) if LOGO_B64 else "💠", layout="wide")
+st.set_page_config(page_title=APP_NAME, page_icon=str(LOGO_FILE) if LOGO_B64 else "🤖",
+                   layout="wide", initial_sidebar_state="expanded")
 
-HISTORY_FILE = BASE_DIR / "chat_history.json"
-IMAGES_DIR = BASE_DIR / "chat_images"
-IMAGES_DIR.mkdir(exist_ok=True)
-MEDIA_DIR = BASE_DIR / "media"
-MEDIA_DIR.mkdir(exist_ok=True)
-MEDIA_INDEX = MEDIA_DIR / "index.json"
+# Each API key gets its own private workspace folder (chats + media), so visitors of the
+# hosted app never see each other's history. Paths are set once the key is entered.
+DATA_ROOT = BASE_DIR / "user_data"
+HISTORY_FILE = IMAGES_DIR = MEDIA_DIR = MEDIA_INDEX = None
+
+
+def set_workspace(api_key):
+    global HISTORY_FILE, IMAGES_DIR, MEDIA_DIR, MEDIA_INDEX
+    # A configured server key may serve many visitors; never share their history.
+    if api_key == _secret_key():
+        if "workspace_id" not in st.session_state:
+            st.session_state.workspace_id = uuid.uuid4().hex
+        workspace_id = st.session_state.workspace_id
+    else:
+        workspace_id = hashlib.sha256(api_key.encode()).hexdigest()
+    ws = DATA_ROOT / workspace_id
+    HISTORY_FILE = ws / "chat_history.json"
+    IMAGES_DIR = ws / "chat_images"
+    MEDIA_DIR = ws / "media"
+    MEDIA_INDEX = MEDIA_DIR / "index.json"
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 
 IMAGE_MODELS = ["gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-1.5", "gpt-image-1-mini"]
 VIDEO_MODEL = "gemini-omni-1.1-flash"
@@ -136,16 +80,43 @@ VIDEO_STYLES = {
     "Dreamy": " Soft, dreamy, pastel colours, slow motion.",
 }
 
-PAGES = ["💬 Chat", "🎨 Media Studio", "📊 Data Studio", "📐 Trigonometry", "🎬 Animations"]
-COLORS = ["#00d4ff", "#ff2e88", "#a78bfa", "#ffb020", "#22c55e", "#f472b6"]
+PAGES = ["💬 Chat", "🧰 AI Toolkit", "🎨 Media Studio", "📊 Data Studio", "📐 Trigonometry", "🎬 Animations"]
+COLORS = ["#ff3d6e", "#ff9f1c", "#ffe14d", "#2ee59d", "#2bb8ff", "#a64dff"]
 NONE = "(none)"
 
 STARTERS = [
     ("💡 Explain a topic", "Explain how the internet works in simple words."),
     ("✉️ Write an email", "Help me write a polite email asking my manager for a day off."),
-    ("📐 Learn trigonometry", "Explain sin, cos and tan with a simple real-life example."),
+    ("🧠 Brainstorm ideas", "Give me 10 creative weekend project ideas I can finish in 2 days."),
     ("🎨 Create an image", "Generate an image of a cute yellow duckling astronaut floating among colourful planets, vibrant digital art"),
+    ("💻 Debug code", "Explain this Python error and how to fix it: TypeError: 'NoneType' object is not subscriptable"),
+    ("🗺️ Plan a trip", "Plan a 3-day budget trip to Lahore with food spots and a day-by-day schedule."),
 ]
+
+# 🎭 Personas: quick presets for the assistant's personality
+PERSONAS = {
+    "🤖 Helpful assistant": "You are a helpful assistant. Give clear, practical answers.",
+    "🧑‍🏫 Patient tutor": "You are a patient tutor. Explain step by step with simple examples, then check understanding with one short question.",
+    "💻 Senior coder": "You are a senior software engineer. Give correct, idiomatic code with brief explanations and point out edge cases.",
+    "✍️ Creative writer": "You are a creative writer. Write vivid, original and engaging text with a strong voice.",
+    "📈 Business analyst": "You are a sharp business analyst. Be structured, data-driven and concise; use headings and bullet points.",
+    "😄 Fun buddy": "You are a cheerful, witty friend. Keep answers short, friendly and sprinkle in fitting emojis.",
+    "🛠️ Custom…": None,
+}
+
+# 🧰 One-click AI tools (AI Toolkit page)
+TOOLS = {
+    "📝 Summarize": ("Summarize the text below in 5 short bullet points, then a one-line TL;DR.", "Paste an article, notes or a long message…"),
+    "🌍 Translate": ("Translate the text below into {lang}. Keep the meaning and tone; output only the translation.", "Text to translate…"),
+    "✨ Rewrite tone": ("Rewrite the text below in a {tone} tone. Keep it about the same length.", "Text to rewrite…"),
+    "✅ Fix grammar": ("Correct the grammar, spelling and punctuation of the text below. Output the corrected text, then list the main fixes.", "Text to proofread…"),
+    "🧒 Explain like I'm 5": ("Explain the topic below so a 5-year-old would understand, using a fun analogy.", "e.g. black holes, inflation, blockchain…"),
+    "❓ Make a quiz": ("Create a 5-question multiple-choice quiz (A–D) about the topic or text below. Put the answer key at the end.", "Topic or text for the quiz…"),
+    "#️⃣ Social post": ("Write 3 catchy social media post options (with hashtags and emojis) about the text below.", "What is the post about?"),
+    "💻 Explain code": ("Explain what the code below does, step by step, and suggest one improvement.", "Paste code…"),
+}
+LANGUAGES = ["Urdu", "English", "Arabic", "Spanish", "French", "German", "Chinese", "Hindi", "Turkish", "Punjabi"]
+TONES = ["professional", "friendly", "persuasive", "funny", "formal", "simple and clear", "poetic"]
 
 # Added to the assistant instructions so the chat model never says "I can't create images".
 APP_CAPABILITIES = (
@@ -156,260 +127,40 @@ APP_CAPABILITIES = (
 )
 
 
+
 # ---------- Logo ----------
 def logo(size=56, uid="a", status=False):
-    """Agent avatar from the logo PNG with a spinning gradient ring; falls back to the SVG logo."""
-    if not LOGO_B64:
-        return svg_logo(size, uid)
+    """Agent avatar (robot logo) inside a spinning rainbow ring."""
     dot = '<span class="agent-dot"></span>' if status else ""
-    return (
-        f'<div class="agent-avatar" style="width:{size}px;height:{size}px">'
-        f'<img src="data:image/png;base64,{LOGO_B64}" alt="{APP_NAME} agent"/>{dot}</div>'
-    )
-
-
-def svg_logo(size=56, uid="a"):
-    first = _S_SEGMENTS[0]
-    s_path = (f"M{_s_xy(*first[0])[0]:.2f} {_s_xy(*first[0])[1]:.2f} " + " ".join(
-        "C" + " ".join(f"{_s_xy(*p)[0]:.2f} {_s_xy(*p)[1]:.2f}" for p in seg[1:]) for seg in _S_SEGMENTS))
-    spark = "M" + " L".join(f"{x:.2f} {y:.2f}" for x, y in _spark_points(*_SPARK_C, _SPARK_R)) + " Z"
-    n1, n2 = _s_xy(42, 20), _s_xy(19.5, 44)
-    return (
-        f'<svg width="{size}" height="{size}" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">'
-        f'<defs><linearGradient id="lg{uid}" x1="0" y1="0" x2="1" y2="1">'
-        '<stop offset="0" stop-color="#00d4ff"/><stop offset=".5" stop-color="#7c3aed"/>'
-        '<stop offset="1" stop-color="#ff2e88"/></linearGradient></defs>'
-        f'<rect width="64" height="64" rx="18" fill="url(#lg{uid})"/>'
-        f'<path d="{s_path}" fill="none" stroke="#fff" stroke-width="{5.5 * _S_SCALE:.2f}" stroke-linecap="round"/>'
-        f'<circle cx="{n1[0]:.2f}" cy="{n1[1]:.2f}" r="3.6" fill="#fff"/>'
-        f'<circle cx="{n1[0]:.2f}" cy="{n1[1]:.2f}" r="1.5" fill="#ff2e88"/>'
-        f'<circle cx="{n2[0]:.2f}" cy="{n2[1]:.2f}" r="3.6" fill="#fff"/>'
-        f'<circle cx="{n2[0]:.2f}" cy="{n2[1]:.2f}" r="1.5" fill="#00d4ff"/>'
-        f'<path d="{spark}" fill="#fff"/>'
-        '</svg>'
-    )
+    img = (f'<img src="data:image/png;base64,{LOGO_B64}" alt="{APP_NAME} agent"/>' if LOGO_B64
+           else f'<span style="font-size:{size // 2}px;line-height:{size}px;display:block;text-align:center">🤖</span>')
+    return f'<div class="agent-avatar" style="width:{size}px;height:{size}px">{img}{dot}</div>'
 
 
 # ---------- Theme ----------
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap');
-html, body, .stApp, input, textarea, button { font-family: 'Plus Jakarta Sans', sans-serif !important; }
-
-.stApp {
-    background:
-        radial-gradient(circle at 12% 8%, rgba(124, 58, 237, 0.35), transparent 40%),
-        radial-gradient(circle at 92% 18%, rgba(255, 46, 136, 0.25), transparent 40%),
-        radial-gradient(circle at 50% 100%, rgba(0, 212, 255, 0.20), transparent 45%),
-        #0b1026;
-    color: #e8ecff;
-}
-[data-testid="stHeader"] { background: transparent; }
-.block-container { max-width: 1150px; padding-top: 2.5rem; }
-.stApp label, .stApp [data-testid="stCaptionContainer"] { color: #c9cff5 !important; }
-.stApp h1, .stApp h2, .stApp h3, .stApp h4 { color: #ffffff; }
-.stApp [data-testid="stMarkdownContainer"] p { color: #dfe3fb; }
-
-/* Sidebar */
-[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #141a3a, #0e1330);
-    border-right: 1px solid rgba(124, 58, 237, 0.35);
-}
-[data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
-[data-testid="stSidebar"] label, [data-testid="stSidebar"] p { color: #e8ecff !important; }
-
-/* Inputs: white box, dark readable text */
-[data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea,
-[data-testid="stNumberInput"] input {
-    background: #ffffff !important;
-    color: #0b1026 !important;
-    -webkit-text-fill-color: #0b1026 !important;
-    border-radius: 12px !important;
-}
-[data-testid="stTextInput"] input::placeholder, [data-testid="stTextArea"] textarea::placeholder {
-    color: #6b7194 !important; -webkit-text-fill-color: #6b7194 !important;
-}
-
-/* Chat input */
-[data-testid="stBottom"] > div, [data-testid="stBottomBlockContainer"] { background: transparent !important; }
-[data-testid="stChatInput"] {
-    border: 2px solid transparent !important;
-    border-radius: 18px !important;
-    background-image: linear-gradient(#ffffff, #ffffff),
-                      linear-gradient(110deg, #00d4ff, #7c3aed, #ff2e88) !important;
-    background-origin: border-box !important;
-    background-clip: padding-box, border-box !important;
-    box-shadow: 0 10px 30px rgba(124, 58, 237, 0.30);
-}
-[data-testid="stChatInput"] > div { background: transparent !important; }
-[data-testid="stChatInput"] textarea {
-    color: #0b1026 !important;
-    -webkit-text-fill-color: #0b1026 !important;
-    caret-color: #7c3aed !important;
-    font-size: 16px !important;
-}
-[data-testid="stChatInput"] textarea::placeholder { color: #6b7194 !important; -webkit-text-fill-color: #6b7194 !important; }
-[data-testid="stChatInput"] button { color: #7c3aed !important; }
-[data-testid="stChatInputSubmitButton"] {
-    background: linear-gradient(110deg, #7c3aed, #ff2e88) !important;
-    color: #ffffff !important;
-    border-radius: 12px !important;
-}
-
-/* Messages */
-[data-testid="stChatMessage"] {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 18px;
-    padding: 14px 16px;
-    margin-bottom: 12px;
-}
-[data-testid="stChatMessage"] p, [data-testid="stChatMessage"] li { color: #eef1ff; line-height: 1.65; }
-[data-testid="stChatMessage"] img { border-radius: 14px; }
-
-/* Metrics as glass cards */
-[data-testid="stMetric"] {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 16px;
-    padding: 14px 16px;
-}
-[data-testid="stMetricLabel"] p { color: #9aa3d6 !important; }
-[data-testid="stMetricValue"] { color: #ffffff !important; }
-
-/* Tabs */
-.stTabs [data-baseweb="tab"] p { color: #c9cff5; font-weight: 600; }
-.stTabs [aria-selected="true"] p { color: #ffffff; }
-.stTabs [data-baseweb="tab-highlight"] { background: linear-gradient(90deg, #00d4ff, #ff2e88); }
-
-/* Default buttons: gradient */
-.stButton > button, .stFormSubmitButton > button, .stDownloadButton > button {
-    background: linear-gradient(110deg, #7c3aed, #ff2e88);
-    color: #ffffff !important;
-    border: none;
-    border-radius: 12px;
-    font-weight: 600;
-    width: 100%;
-    transition: transform .15s ease, box-shadow .15s ease;
-}
-.stButton > button:hover, .stFormSubmitButton > button:hover, .stDownloadButton > button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 20px rgba(255, 46, 136, 0.40);
-    color: #ffffff !important;
-}
-.stButton > button:disabled { opacity: .45; }
-
-/* Chat history list */
-.st-key-history .stButton > button {
-    background: transparent;
-    border: 1px solid transparent;
-    color: #d5daf7 !important;
-    font-weight: 500;
-    justify-content: flex-start;
-    text-align: left;
-    padding: 6px 12px;
-    min-height: 0;
-}
-.st-key-history .stButton > button p {
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left;
-}
-.st-key-history .stButton > button:hover { background: rgba(255, 255, 255, 0.07); box-shadow: none; transform: none; }
-.st-key-history .stButton > button[kind="primary"],
-.st-key-history [data-testid="stBaseButton-primary"] {
-    background: rgba(124, 58, 237, 0.28);
-    border: 1px solid rgba(167, 139, 250, 0.6);
-    color: #ffffff !important;
-}
-.group-label { font-size: 12px; font-weight: 700; color: #8c95c9; margin: 14px 0 4px 4px; }
-
-/* Starter cards */
-.st-key-starters .stButton > button {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(0, 212, 255, 0.35);
-    color: #e8ecff !important;
-    min-height: 64px;
-    font-weight: 500;
-}
-.st-key-starters .stButton > button:hover { background: rgba(0, 212, 255, 0.12); box-shadow: 0 8px 20px rgba(0, 212, 255, 0.25); }
-
-/* Agent avatar */
-@property --ring { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
-@keyframes ring-spin { to { --ring: 360deg; } }
-@keyframes live-pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
-    100% { box-shadow: 0 0 0 9px rgba(34, 197, 94, 0); }
-}
-@keyframes blink { 0%, 80%, 100% { opacity: .2; } 40% { opacity: 1; } }
-.agent-avatar {
-    position: relative; flex-shrink: 0; border-radius: 50%; padding: 3px;
-    background: conic-gradient(from var(--ring), #00d4ff, #7c3aed, #ff2e88, #ffb020, #00d4ff);
-    animation: ring-spin 4s linear infinite;
-    box-shadow: 0 0 26px rgba(124, 58, 237, 0.55);
-}
-.agent-avatar img {
-    width: 100%; height: 100%; display: block; object-fit: cover;
-    border-radius: 50%; border: 2px solid #0b1026;
-}
-.agent-dot {
-    position: absolute; right: 1px; bottom: 1px; width: 26%; height: 26%;
-    max-width: 16px; max-height: 16px; border-radius: 50%;
-    background: #22c55e; border: 2px solid #0b1026;
-    animation: live-pulse 1.8s ease-out infinite;
-}
-.agent-status {
-    display: inline-flex; align-items: center; gap: 8px; margin-top: 6px;
-    font-size: 13px; font-weight: 600; color: #86efac;
-    background: rgba(34, 197, 94, 0.10); border: 1px solid rgba(34, 197, 94, 0.35);
-    padding: 3px 12px; border-radius: 999px;
-}
-.agent-status .live {
-    width: 8px; height: 8px; border-radius: 50%; background: #22c55e;
-    animation: live-pulse 1.8s ease-out infinite;
-}
-.thinking { color: #b8bfe6; font-style: italic; }
-.thinking span { animation: blink 1.4s infinite; font-weight: 800; }
-.thinking span:nth-child(2) { animation-delay: .2s; }
-.thinking span:nth-child(3) { animation-delay: .4s; }
-[data-testid="stChatMessage"] [data-testid="stChatMessageAvatarCustom"] img,
-[data-testid="stChatMessage"] img[alt="assistant avatar"] { border-radius: 50%; }
-
-/* Brand */
-.brand { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
-.brand-name { font-size: 22px; font-weight: 800; color: #ffffff; line-height: 1.1; }
-.brand-sub { font-size: 14px; color: #9aa3d6; }
-.hero-title {
-    font-size: 44px; font-weight: 800; line-height: 1.1; margin: 26px 0 10px;
-    background: linear-gradient(110deg, #00d4ff, #a78bfa 45%, #ff2e88);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-}
-.hero-text { color: #b8bfe6; font-size: 18px; margin-bottom: 22px; }
-.page-title { font-size: 32px; font-weight: 800; color: #ffffff; margin: 18px 0 2px; }
-.page-sub { color: #9aa3d6; margin-bottom: 18px; }
-.chat-title { font-size: 26px; font-weight: 800; color: #ffffff; margin: 18px 0 2px; }
-.side-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-.side-brand span { font-weight: 800; font-size: 18px; color: #ffffff; }
-</style>
-""", unsafe_allow_html=True)
-
-from aesthetic_theme import apply_theme
+from rainbow_theme import apply_theme
 apply_theme()
-from purple_palette import apply_palette
-apply_palette()
 
 
-def brand_header():
+
+def brand_header(chips=True):
+    right = ""
+    if chips:
+        right = ('<div class="brand-right"><span class="chip">💬 Chat</span><span class="chip">🎨 Images</span>'
+                 '<span class="chip">🎬 Video</span><span class="chip">📊 Data</span><span class="chip">🧰 Tools</span></div>')
     st.markdown(
-        f'<div class="brand">{logo(68, "h", status=True)}'
-        f'<div><div class="brand-name">{APP_NAME}</div>'
-        '<div class="brand-sub">Conversation Studio</div>'
-        '<div class="agent-status"><span class="live"></span>Agent online</div></div></div>',
+        f'<div class="brand">{logo(52, "h", status=True)}'
+        f'<div><div class="brand-name">Suleman <em>AI</em></div>'
+        '<div class="brand-sub">Your rainbow AI agent studio</div>'
+        f'<div class="agent-status"><span class="live"></span>Agent online</div></div>{right}</div>',
         unsafe_allow_html=True,
     )
 
 
 def page_heading(title, subtitle):
-    st.markdown(f'<div class="page-title">{title}</div><div class="page-sub">{subtitle}</div>',
-                unsafe_allow_html=True)
+    emoji, _, text = title.partition(" ")  # keep the emoji outside the gradient text
+    st.markdown(f'<div class="page-title"><span class="emo">{emoji}</span>{text}</div>'
+                f'<div class="page-sub">{subtitle}</div>', unsafe_allow_html=True)
 
 
 # ---------- Chart styling ----------
@@ -484,6 +235,10 @@ def delete_images(messages):
             (IMAGES_DIR / name).unlink(missing_ok=True)
 
 
+def now_label():
+    return datetime.now().strftime("%I:%M %p").lstrip("0")
+
+
 def make_title(text):
     text = " ".join(text.split())
     return text[:40] + ("…" if len(text) > 40 else "")
@@ -512,26 +267,64 @@ def to_markdown(conv):
 
 
 # ---------- Screen 1: API key ----------
+def check_key(key):
+    """Quick, free call to confirm the key works before opening the studio."""
+    try:
+        OpenAI(api_key=key, timeout=20.0).models.list()
+        return None
+    except AuthenticationError:
+        return "🔒 That key was not accepted by OpenAI. Check it and try again."
+    except APIConnectionError:
+        return "🌐 Could not reach OpenAI. Check your connection and try again."
+    except Exception:
+        return None  # other errors (e.g. restricted key) — let the user in and show errors per request
+
+
+def _secret_key():
+    try:
+        return st.secrets.get("OPENAI_API_KEY", "")
+    except Exception:
+        return ""
+
+
+if "api_key" not in st.session_state and _secret_key():
+    st.session_state.api_key = _secret_key()
+
 if "api_key" not in st.session_state:
     left, mid, right = st.columns([1, 2, 1])
     with mid:
-        brand_header()
+        brand_header(chips=False)
         st.markdown(
-            '<div class="hero-title">Connect to start chatting.</div>'
-            '<div class="hero-text">Enter your OpenAI API key to open your assistant.</div>',
+            '<div class="hero-title">Connect to start chatting <span class="emo">✨</span></div>'
+            '<div class="hero-text">Enter your OpenAI API key to wake up your AI agent.</div>'
+            '<div class="feature-grid">'
+            '<div><b>💬 Smart chat</b>Personas, vision & streaming</div>'
+            '<div><b>🎨 Media studio</b>Images & videos from text</div>'
+            '<div><b>🧰 AI toolkit</b>Summarize, translate, quiz…</div>'
+            '<div><b>📊 Data studio</b>Charts + AI insights</div>'
+            '</div>',
             unsafe_allow_html=True,
         )
         with st.form("key_form"):
-            key = st.text_input("OpenAI API key", type="password", placeholder="sk-...")
-            start = st.form_submit_button("Open studio")
+            key = st.text_input("🔑 OpenAI API key", type="password", placeholder="sk-...")
+            start = st.form_submit_button("🚀 Open studio", type="primary")
         if start:
-            if key.strip():
-                st.session_state.api_key = key.strip()
-                st.rerun()
-            else:
+            key = key.strip()
+            if not key:
                 st.warning("Enter your API key to continue.")
-        st.caption("Your key stays in this session only and is never written to the history file.")
+            else:
+                with st.spinner("Checking your key…"):
+                    problem = check_key(key)
+                if problem:
+                    st.error(problem)
+                else:
+                    st.session_state.api_key = key
+                    st.rerun()
+        st.caption("🔐 Your key is held in server session memory. Chat and media files are stored on this "
+                   "app server and may be lost when it restarts. Use your own key; do not share it.")
     st.stop()
+
+set_workspace(st.session_state.api_key)
 
 # ---------- Session state ----------
 if "store" not in st.session_state:
@@ -577,6 +370,12 @@ def rename_chat():
         save_store()
 
 
+def toggle_pin():
+    conv = convs[st.session_state.current_id]
+    conv["pinned"] = not conv.get("pinned", False)
+    save_store()
+
+
 def delete_chat():
     conv = convs.pop(st.session_state.current_id, None)
     if conv:
@@ -594,17 +393,25 @@ def clear_all():
 
 
 # ---------- Sidebar ----------
-with st.sidebar:
-    st.markdown(f'<div class="side-brand">{logo(40, "s", status=True)}<span>{APP_NAME}</span></div>',
-                unsafe_allow_html=True)
+def change_key():
+    # Clear queued prompts, uploads, toolkit results and credentials together.
+    st.session_state.clear()
 
-    st.radio("Workspace", PAGES, key="page")
-    st.button("＋ New chat", on_click=new_chat)
+
+with st.sidebar:
+    st.radio("Workspace", PAGES, key="page", label_visibility="collapsed")
+    st.button("✨ New chat", on_click=new_chat, type="primary")
+
+    n_msgs = sum(len(c["messages"]) for c in convs.values())
+    n_media = len(json.loads(MEDIA_INDEX.read_text(encoding="utf-8"))) if MEDIA_INDEX.exists() else 0
+    st.markdown(f'<div class="side-stats"><div><b>{len(convs)}</b><small>💬 chats</small></div>'
+                f'<div><b>{n_msgs}</b><small>✉️ messages</small></div>'
+                f'<div><b>{n_media}</b><small>🖼️ media</small></div></div>', unsafe_allow_html=True)
 
     search = st.text_input("Search", placeholder="🔍 Search chats",
                            label_visibility="collapsed").strip().lower()
 
-    items = sorted(convs.items(), key=lambda kv: kv[1]["updated"], reverse=True)
+    items = sorted(convs.items(), key=lambda kv: (kv[1].get("pinned", False), kv[1]["updated"]), reverse=True)
     if search:
         items = [
             (cid, c) for cid, c in items
@@ -617,39 +424,54 @@ with st.sidebar:
             st.caption("No chats found." if search else "Your chats will appear here.")
         last_group = None
         for cid, c in items:
-            group = group_label(c["updated"])
+            group = "📌 Pinned" if c.get("pinned") else group_label(c["updated"])
             if group != last_group:
                 st.markdown(f'<div class="group-label">{group}</div>', unsafe_allow_html=True)
                 last_group = group
             st.button(
-                f"💬 {c['title']}", key=f"open_{cid}",
+                f"{'📌' if c.get('pinned') else '💬'} {c['title']}", key=f"open_{cid}",
                 on_click=open_chat, args=(cid,),
                 type="primary" if cid == st.session_state.current_id else "secondary",
             )
 
     st.divider()
 
-    with st.expander("⚙️ Settings"):
-        model = st.text_input("Model", value="gpt-4o-mini",
-                              help="Use a vision model (e.g. gpt-4o-mini) to chat about images.").strip()
-        temperature = st.slider("Creativity", 0.0, 2.0, 1.0, 0.1,
+    with st.expander("🎭 Persona & model", expanded=False):
+        persona = st.selectbox("Persona", list(PERSONAS), key="persona")
+        if PERSONAS[persona] is None:
+            instructions = st.text_area("Custom instructions", key="custom_instructions",
+                                        value="You are a helpful assistant. Give clear, practical answers.")
+        else:
+            instructions = PERSONAS[persona]
+            st.caption(f"🗒️ {instructions}")
+        model = st.selectbox("Chat model", ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "Other…"],
+                             key="model_pick", help="Use a vision model (e.g. gpt-4o-mini) to chat about images.")
+        if model == "Other…":
+            model = st.text_input("Model name", value="gpt-4o-mini", key="model_custom").strip()
+        temperature = st.slider("🌡️ Creativity", 0.0, 2.0, 1.0, 0.1,
                                 help="Lower = focused, higher = creative. Some models only accept 1.0.")
-        instructions = st.text_area("Assistant instructions",
-                                    value="You are a helpful assistant. Give clear, practical answers.")
+        reply_len = st.select_slider("📏 Reply length", ["Short", "Normal", "Detailed"], value="Normal")
+        if reply_len == "Short":
+            instructions += " Keep answers brief: at most a few sentences."
+        elif reply_len == "Detailed":
+            instructions += " Give thorough, detailed answers with examples."
+        language = st.selectbox("🌐 Reply language", ["Auto", "English", "Urdu", "Roman Urdu", "Arabic", "Hindi"])
+        if language != "Auto":
+            instructions += f" Always reply in {language}."
+
+    with st.expander("⚙️ Settings"):
         st.selectbox("Image model for chat", IMAGE_MODELS, key="chat_img_model",
                      help="Used when you ask for a picture in Chat (e.g. “generate an egg image”).")
         st.text_input("Google Gemini API key (for videos)", type="password", key="gemini_key",
                       help="Videos are made with Google's Gemini Omni Flash. "
                            "Get a free key at aistudio.google.com/apikey")
-        if st.button("Change API key"):
-            del st.session_state.api_key
-            st.rerun()
+        st.button("🔑 Change API key", on_click=change_key)
 
     with st.expander("🗑️ Clear all chats"):
         confirm_all = st.checkbox("Yes, delete every saved chat")
         st.button("Delete all", disabled=not confirm_all, on_click=clear_all)
 
-    st.caption(f"{len(convs)} saved chat(s) · stored on this computer")
+    st.caption("🔐 Private workspace for this API key")
 
 
 # ---------- AI helpers ----------
@@ -731,14 +553,14 @@ def generate_reply(conv):
             thinking.empty()
             st.error(friendly_error(e))
             return False
-    conv["messages"].append({"role": "assistant", "content": answer})
+    conv["messages"].append({"role": "assistant", "content": answer, "time": now_label()})
     conv["updated"] = datetime.now().isoformat()
     save_store()
     return True
 
 
 def show_message(msg):
-    avatar = "🧑" if msg["role"] == "user" else ASSISTANT_AVATAR
+    avatar = "🙂" if msg["role"] == "user" else ASSISTANT_AVATAR
     with st.chat_message(msg["role"], avatar=avatar):
         for name in msg.get("images", []):
             path = IMAGES_DIR / name
@@ -749,6 +571,8 @@ def show_message(msg):
             if path.exists():
                 st.video(str(path))
         st.markdown(msg["content"])
+        if msg.get("time"):
+            st.markdown(f'<div class="msg-meta">🕒 {msg["time"]}</div>', unsafe_allow_html=True)
 
 
 
@@ -1264,36 +1088,93 @@ def page_media():
         tab_gallery()
 
 # =====================================================================
+#  PAGE: AI TOOLKIT  (one-click writing & learning tools)
+# =====================================================================
+def page_toolkit():
+    page_heading("🧰 AI Toolkit", "One-click tools: summarize, translate, rewrite, proofread, quiz and more.")
+    tool = st.radio("Tool", list(TOOLS), horizontal=True, key="tool_pick", label_visibility="collapsed")
+    task, placeholder = TOOLS[tool]
+
+    extra = {}
+    if "{lang}" in task:
+        extra["lang"] = st.selectbox("🌍 Translate into", LANGUAGES, key="tool_lang")
+    if "{tone}" in task:
+        extra["tone"] = st.selectbox("🎭 New tone", TONES, key="tool_tone")
+
+    text = st.text_area("Input", height=170, key=f"tool_text_{tool}", placeholder=placeholder,
+                        label_visibility="collapsed")
+    c1, c2 = st.columns([1, 3])
+    run = c1.button("⚡ Run tool", type="primary", disabled=not (text.strip() and model), key="tool_run")
+    c2.caption(f"📝 {len(text.split())} words · {len(text)} characters")
+
+    if run:
+        prompt = task.format(**extra) + "\n\n---\n" + text.strip()
+        with st.container(border=True):
+            try:
+                out = st.write_stream(stream_answer([{"role": "user", "content": prompt}]))
+                st.session_state.tool_result = (tool, out)
+            except Exception as e:
+                st.error(friendly_error(e))
+                st.session_state.pop("tool_result", None)
+    elif st.session_state.get("tool_result", (None,))[0] == tool:
+        with st.container(border=True):
+            st.markdown(st.session_state.tool_result[1])
+
+    res = st.session_state.get("tool_result")
+    if res and res[0] == tool and res[1]:
+        d1, d2 = st.columns(2)
+        d1.download_button("⬇️ Download result", res[1], file_name="suleman_ai_result.md", mime="text/markdown",
+                           key="tool_dl")
+        d2.button("💬 Continue in chat", key="tool_to_chat", on_click=send_to_chat,
+                  args=(f"{tool} result:\n\n{res[1]}\n\nLet's discuss this further.",))
+
+
+def send_to_chat(text):
+    st.session_state.current_id = None
+    st.session_state.page = PAGES[0]
+    st.session_state.queued = text
+
+
+# =====================================================================
 #  PAGE: CHAT
 # =====================================================================
 def page_chat():
     conv = convs.get(st.session_state.current_id)
 
     if conv is None:
+        hour = datetime.now().hour
+        greet, icon = (("Good morning", "☀️") if hour < 12 else ("Good afternoon", "🌤️") if hour < 18
+                       else ("Good evening", "🌙"))
         st.markdown(
-            '<div class="hero-title">A fresh space for your ideas.</div>'
-            '<div class="hero-text">Ask anything · attach an image with 📎 · ask for a picture in plain words '
-            '(“generate an image of a red car”) or type <b>/image</b> / <b>/video</b> followed by a description.</div>',
+            f'<div class="hero-title">{greet}! What shall we create? <span class="emo">{icon}</span></div>'
+            '<div class="hero-text">Ask anything · attach an image with 📎 · say “generate an image of a red car” '
+            'or type <code>/image</code> / <code>/video</code> + a description.</div>',
             unsafe_allow_html=True,
         )
         with st.container(key="starters"):
-            cols = st.columns(2)
+            cols = st.columns(3)
             for i, (label, text) in enumerate(STARTERS):
-                cols[i % 2].button(label, key=f"starter_{i}", on_click=queue_prompt, args=(text,))
+                cols[i % 3].button(label, key=f"starter_{i}", on_click=queue_prompt, args=(text,))
     else:
-        head, opts = st.columns([5, 1.4])
+        head, opts = st.columns([5, 1.3])
         with head:
-            st.markdown(f'<div class="chat-title">{conv["title"]}</div>', unsafe_allow_html=True)
-            st.caption(f"{len(conv['messages'])} messages · last active "
+            words = sum(len(m["content"].split()) for m in conv["messages"])
+            st.markdown(f'<div class="chat-title">{"📌 " if conv.get("pinned") else ""}'
+                        f'{html.escape(conv["title"])}</div>', unsafe_allow_html=True)
+            st.caption(f"💬 {len(conv['messages'])} messages · 📝 {words:,} words · 🕒 "
                        f"{datetime.fromisoformat(conv['updated']).strftime('%d %b, %I:%M %p')}")
         with opts:
-            with st.popover("⋯ Options"):
-                st.text_input("Rename chat", value=conv["title"],
+            with st.popover("⋯ Options", use_container_width=True):
+                st.text_input("✏️ Rename chat", value=conv["title"],
                               key=f"rename_box_{st.session_state.current_id}", on_change=rename_chat)
-                st.download_button("⬇ Download (.md)", to_markdown(conv),
-                                   file_name=f"{conv['title'][:30] or 'chat'}.md", mime="text/markdown")
+                st.button("📍 Unpin chat" if conv.get("pinned") else "📌 Pin chat", on_click=toggle_pin)
+                fname = re.sub(r"[^\w\- ]", "", conv["title"])[:30].strip() or "chat"
+                st.download_button("⬇️ Markdown (.md)", to_markdown(conv), file_name=f"{fname}.md",
+                                   mime="text/markdown")
+                st.download_button("⬇️ JSON (.json)", json.dumps(conv, indent=2, ensure_ascii=False),
+                                   file_name=f"{fname}.json", mime="application/json")
                 confirm_del = st.checkbox("Confirm delete")
-                st.button("Delete this chat", disabled=not confirm_del, on_click=delete_chat)
+                st.button("🗑️ Delete this chat", disabled=not confirm_del, on_click=delete_chat)
 
         for msg in conv["messages"]:
             show_message(msg)
@@ -1333,7 +1214,7 @@ def page_chat():
             (IMAGES_DIR / name).write_bytes(f.getvalue())
             image_names.append(name)
 
-        user_msg = {"role": "user", "content": text}
+        user_msg = {"role": "user", "content": text, "time": now_label()}
         if image_names:
             user_msg["images"] = image_names
         conv["messages"].append(user_msg)
@@ -1417,7 +1298,8 @@ def build_chart(df):
         c1, c2, c3, c4 = st.columns(4)
         x = c1.selectbox("X axis", all_cols)
         y_options = [c for c in num_cols if c != x] or num_cols
-        y = c2.selectbox("Y axis", y_options)
+        y_default = max(range(len(y_options)), key=lambda i: df[y_options[i]].nunique())
+        y = c2.selectbox("Y axis", y_options, index=y_default)
         color = c3.selectbox("Colour by", [NONE] + all_cols)
         anim = c4.selectbox("Animate by", [NONE] + all_cols,
                             help="Pick a column such as Year to play the chart as an animation.")
@@ -1880,14 +1762,8 @@ def page_animations():
 # =====================================================================
 brand_header()
 page = st.session_state.page
-if page == PAGES[0]:
-    page_chat()
-elif page == PAGES[1]:
-    page_media()
-elif page == PAGES[2]:
-    page_data()
-elif page == PAGES[3]:
-    page_trig()
-else:
-    page_animations()
-
+ROUTES = {
+    PAGES[0]: page_chat, PAGES[1]: page_toolkit, PAGES[2]: page_media,
+    PAGES[3]: page_data, PAGES[4]: page_trig, PAGES[5]: page_animations,
+}
+ROUTES.get(page, page_chat)()
